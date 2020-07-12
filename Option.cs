@@ -1,19 +1,37 @@
 ﻿using System;
+using System.Threading.Tasks;
 
 namespace Monads
 {
 	public class Option<T>
 	{
-		public static implicit operator Option<T>(T obj) =>
-			obj is null ? Option.None<T>() : Option.Some(obj);
+		public static implicit operator Option<T>(T obj) => Option.Some(obj);
 
 		internal Option() { }
 
+		public async Task<Option<TR>> MapAsync<TR>(Func<T, Task<TR>> mapper)
+		{
+			return this switch
+			{
+				Some<T> s => await mapper(s),
+				_ => Option.None<TR>()
+			};
+		}
+		
 		public Option<TR> Map<TR>(Func<T, TR> pred)
 		{
 			return this switch
 			{
 				Some<T> s => pred(s.Value),
+				_ => Option.None<TR>()
+			};
+		}
+
+		public async Task<Option<TR>> BindAsync<TR>(Func<T, Task<Option<TR>>> binder)
+		{
+			return this switch
+			{
+				Some<T> s => await binder(s),
 				_ => Option.None<TR>()
 			};
 		}
@@ -88,12 +106,24 @@ namespace Monads
 			return this;
 		}
 
+		public async Task<Option<T>> OnSomeAsync(Func<T, Task> onsome)
+		{
+			if (this is Some<T> s) await onsome(s);
+			return this;
+		}
+		
 		public Option<T> OnSome(Action<T> onsome)
 		{
 			if (this is Some<T> s) onsome(s);
 			return this;
 		}
 
+		public async Task<Option<T>> OnNoneAsync(Func<Task> onnone)
+		{
+			if (this is None<T>) await onnone();
+			return this;
+		}
+		
 		public Option<T> OnNone(Action onnone)
 		{
 			if (this is None<T>) onnone();
@@ -138,5 +168,27 @@ namespace Monads
 		public static T IfNone<T>(this Option<T> op, T replacement) => op is Some<T> s ? s : replacement;
 
         public static Option<T> ToOption<T>(this T obj) => obj;
+
+        public static async Task<Option<TR>> MapAsync<TR, T>(
+	        this Task<Option<T>> op,
+	        Func<T, Task<TR>> mapper)
+        {
+	        return await op switch
+	        {
+		        Some<T> s => await mapper(s),
+		        _ => None<TR>()
+	        };
+        }
+
+        public static async Task<Option<TR>> BindAsync<T, TR>(
+	        this Task<Option<T>> op,
+	        Func<T, Task<Option<TR>>> binder)
+        {
+	        return await op switch
+	        {
+		        Some<T> s => await binder(s),
+		        _ => None<TR>()
+	        };
+        }
     }
 }
