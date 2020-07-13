@@ -21,6 +21,15 @@ namespace Monads
 		public static implicit operator Result<TOk, TError>(TError obj) => Result.Error<TOk, TError>(obj);
 		
 		#region Higher Order Functions
+
+		public TOk Match(Func<TOk, TOk> ok, Func<TError, TOk> err)
+		{
+			return this switch
+			{
+				Ok<TOk, TError> tok => ok(tok),
+				Error<TOk, TError> error => err(error)
+			};
+		}
 		
 		/// <summary>
 		/// Maps the success result to a new value asynchronously.
@@ -50,7 +59,7 @@ namespace Monads
 		/// Binds the result value to a new result value asynchronously 
 		/// </summary>
 		public async Task<Result<TOutput, TError>> BindAsync<TOutput>(
-			Func<Result<TOk, TError>, Task<Result<TOutput, TError>>> pred)
+			Func<TOk, Task<Result<TOutput, TError>>> pred)
 		{
 			return this switch
 			{
@@ -100,6 +109,24 @@ namespace Monads
 		public Result<TOk, TError> OnSuccess(Action<TOk> onsuccess)
 		{
 			if (this is Ok<TOk, TError> ok) onsuccess(ok);
+			return this;
+		}
+
+		public Result<TOk, TError> OnSuccessTry(Action<TOk> Try, Func<Exception, TError> Catch)
+		{
+			if (this is Ok<TOk, TError> ok)
+			{
+				try
+				{
+					Try(ok);
+					return this;
+				}
+				catch (Exception e)
+				{
+					return Catch(e);
+				}
+			}
+
 			return this;
 		}
 
@@ -207,36 +234,53 @@ namespace Monads
 			}
 		}
 		
-		public Result<TOkOutput, TError> MapTry<TOkOutput, TException>(Func<TOk, TOkOutput> Try, Func<TException, TError> Catch)
-			where TException: Exception
+		public async Task<Result<TOkOutput, TError>> BindTryAsync<TOkOutput>(
+			Func<TOk, Task<Result<TOkOutput, TError>>> Try, 
+			Func<Exception, Task<Result<TOkOutput, TError>>> Catch)
 		{
 			if (this is Error<TOk, TError> err) return Result.Error<TOkOutput, TError>(err.ErrorValue);
 			try
 			{
 				var ok = (Ok<TOk, TError>) this;
-				return Try(ok);
+				return await Try(ok);
 			}
-			catch (TException e)
+			catch (Exception e)
 			{
-				return Catch(e);
+				return await Catch(e);
+			}
+		}
+		
+		public async Task<Result<TOkOutput, TError>> MapTryAsync<TOkOutput>(
+			Func<TOk, Task<TOkOutput>> Try, 
+			Func<Exception, Task<TError>> Catch)
+		{
+			if (this is Error<TOk, TError> err) return Result.Error<TOkOutput, TError>(err.ErrorValue);
+			try
+			{
+				var ok = (Ok<TOk, TError>) this;
+				return await Try(ok);
+			}
+			catch (Exception e)
+			{
+				return await Catch(e);
 			}
 		}
 
-		public Result<TOkOutput, TError> BindTry<TOkOutput, TException>(Func<TOk, Result<TOkOutput, TError>> Try, 
-			Func<Exception, Result<TOkOutput, TError>> Catch)
-			where TException: Exception
-		{
-			if (this is Error<TOk, TError> err) return Result.Error<TOkOutput, TError>(err.ErrorValue);
-			try
-			{
-				var ok = (Ok<TOk, TError>) this;
-				return Try(ok);
-			}
-			catch (TException e)
-			{
-				return Catch(e);
-			}
-		}
+//		public Result<TOkOutput, TError> BindTry<TOkOutput, TException>(Func<TOk, Result<TOkOutput, TError>> Try, 
+//			Func<Exception, Result<TOkOutput, TError>> Catch)
+//			where TException: Exception
+//		{
+//			if (this is Error<TOk, TError> err) return Result.Error<TOkOutput, TError>(err.ErrorValue);
+//			try
+//			{
+//				var ok = (Ok<TOk, TError>) this;
+//				return Try(ok);
+//			}
+//			catch (TException e)
+//			{
+//				return Catch(e);
+//			}
+//		}
 
 		public void Try<TException>(Action<Result<TOk, TError>> Try, Action<TException> Catch) where TException: Exception
 		{
@@ -296,9 +340,9 @@ namespace Monads
 
 	public static class Result
 	{
-		public static Result<TOk, TError> Ok<TOk, TError>(TOk obj) => new Ok<TOk, TError>(obj);
+		public static Result<TOk, TError> Ok<TOk, TError>(this TOk obj) => new Ok<TOk, TError>(obj);
 		
-		public static Result<TOk, TError> Error<TOk, TError>(TError err) => new Error<TOk, TError>(err);
+		public static Result<TOk, TError> Error<TOk, TError>(this TError err) => new Error<TOk, TError>(err);
 
 		public static Result<TOk, TError> Try<TOk, TError>(Func<TOk> throwable, Func<Exception, TError> handler)
 		{
@@ -365,13 +409,22 @@ namespace Monads
 
 		public static async Task<Result<TOutput, TError>> BindAsync<TInput, TOutput, TError>(
 			this Task<Result<TInput, TError>> res,
-			Func<Result<TInput, TError>, Task<Result<TOutput, TError>>> pred)
+			Func<TInput, Task<Result<TOutput, TError>>> pred)
 		{
 			return await res switch
 			{
 				Ok<TInput, TError> ok => await pred(ok),
 				Error<TInput, TError> err => Error<TOutput, TError>(err)
 			};
+		}
+
+		public static async Task<Result<TOk, TError>> OnSuccessAsync<TOk, TError>(
+			this Task<Result<TOk, TError>> res,
+			Func<TOk, Task> onsuccess)
+		{
+			var awaited = await res;
+			if (awaited is Ok<TOk, TError> ok) await onsuccess(ok);
+			return awaited;
 		}
 	}
 }
