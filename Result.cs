@@ -18,8 +18,24 @@ namespace Monads
 		internal Result() { }
 
 		public static implicit operator Result<TOk, TError>(TOk obj) => Result.Ok<TOk, TError>(obj);
-
 		public static implicit operator Result<TOk, TError>(TError obj) => Result.Error<TOk, TError>(obj);
+
+		public bool IsOk(out TOk ok, out TError err)
+		{
+			(ok, err) = this switch
+			{
+				Ok<TOk, TError> okres => (okres.Value, default),
+				Error<TOk, TError> errres => (default, errres.ErrorValue)
+			};
+
+			return this is Ok<TOk, TError>;
+		}
+
+		public bool IsError(out TOk ok, out TError err) => !IsOk(out ok, out err);
+
+		public bool IsOk(out TOk ok) => IsOk(out ok, out _);
+
+		public bool IsError(out TError err) => !IsOk(out _, out err);
 		
 		#region Higher Order Functions
 		
