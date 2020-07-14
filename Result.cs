@@ -21,15 +21,6 @@ namespace Monads
 		public static implicit operator Result<TOk, TError>(TError obj) => Result.Error<TOk, TError>(obj);
 		
 		#region Higher Order Functions
-
-		public TOk Match(Func<TOk, TOk> ok, Func<TError, TOk> err)
-		{
-			return this switch
-			{
-				Ok<TOk, TError> tok => ok(tok),
-				Error<TOk, TError> error => err(error)
-			};
-		}
 		
 		/// <summary>
 		/// Maps the success result to a new value asynchronously.
@@ -52,6 +43,15 @@ namespace Monads
 			{
 				Ok<TOk, TError> ok => pred(ok),
 				Error<TOk, TError> err => Result.Error<TOutput, TError>(err)
+			};
+		}
+
+		public Result<TOk, TError> MapError(Func<TError, TOk> onerror)
+		{
+			return this switch
+			{
+				Ok<TOk, TError> ok => ok.Value,
+				Error<TOk, TError> err => onerror(err)
 			};
 		}
 
@@ -89,6 +89,16 @@ namespace Monads
 			{
 				Ok<TOk, TError> ok => Result.Ok<TOk, TOutError>(ok),
 				Error<TOk, TError> err => pred(err)
+			};
+		}
+
+		public async Task<Result<TOk, TOutError>> BindErrorAsync<TOutError>(
+			Func<TError, Task<Result<TOk, TOutError>>> onerror)
+		{
+			return this switch
+			{
+				Ok<TOk, TError> ok => ok.Value,
+				Error<TOk, TError> err => await onerror(err)
 			};
 		}
 
@@ -425,6 +435,42 @@ namespace Monads
 			var awaited = await res;
 			if (awaited is Ok<TOk, TError> ok) await onsuccess(ok);
 			return awaited;
+		}
+
+		public static TOutput Match<TOk, TError, TOutput>(
+			this Result<TOk, TError> result,
+			Func<TOk, TOutput> ok,
+			Func<TError, TOutput> err)
+		{
+			return result switch
+			{
+				Ok<TOk, TError> success => ok(success),
+				Error<TOk, TError> error => err(error)
+			};
+		}
+
+		public static async Task<TOutput> MatchAsync<TOk, TError, TOutput>(
+			this Result<TOk, TError> result,
+			Func<TOk, Task<TOutput>> ok,
+			Func<TError, Task<TOutput>> err)
+		{
+			return result switch
+			{
+				Ok<TOk, TError> success => await ok(success),
+				Error<TOk, TError> error => await err(error)
+			};
+		}
+
+		public static async Task<TOutput> MatchAsync<TOk, TError, TOutput>(
+			this Task<Result<TOk, TError>> result,
+			Func<TOk, Task<TOutput>> ok,
+			Func<TError, Task<TOutput>> err)
+		{
+			return await result switch
+			{
+				Ok<TOk, TError> success => await ok(success),
+				Error<TOk, TError> error => await err(error)
+			};
 		}
 	}
 }
